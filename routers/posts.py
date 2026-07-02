@@ -1,0 +1,217 @@
+# routers/posts.py — пости та прилади з нотифікацією колектора
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from core.auth import any_role, admin_only, operator_only
+from core.database import fetchall, fetchone, execute
+import httpx, asyncio, logging
+
+log = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/posts", tags=["posts"])
+
+# Адреса колектора для hot-reload (колектор слухає на localhost:8001)
+COLLECTOR_RELOAD_URL = "http://127.0.0.1:8001/reload"
+
+
+class PostCreate(BaseModel):
+    name:      str
+    location:  Optional[str]   = None
+    region:    Optional[str]   = None
+    latitude:  Optional[float] = None
+    longitude: Optional[float] = None
+
+class PostUpdate(BaseModel):
+    name:      Optional[str]   = None
+    location:  Optional[str]   = None
+    region:    Optional[str]   = None
+    latitude:  Optional[float] = None
+    longitude: Optional[float] = None
+    is_active: Optional[bool]  = None
+
+class DeviceCreate(BaseModel):
+    type:  str
+    name:  str
+    host:  str
+    port:  int
+
+class DeviceUpdate(BaseModel):
+    name:  Optional[str] = None
+    host:  Optional[str] = None
+    port:  Optional[int] = None
+
+
+async def notify_collector():
+    """Повідомляє колектор що список приладів змінився."""
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            await client.post(COLLECTOR_RELOAD_URL)
+        log.info("Колектор отримав сигнал перезавантаження")
+    except Exception:
+        log.debug("Колектор недоступний на :8001 (нормально якщо не запущений)")
+
+
+# ── ПОСТИ ───────────────────────────────────────────────────
+
+@router.get("/")
+def get_posts(user: dict = Depends(any_role)):
+    if user["role"] == "operator" and user["post_id"]:
+        rows = fetchall("SELECT * FROM posts WHERE id=%s", (str(user["post_id"]),))
+    else:
+        rows = fetchall("SELECT * FROM posts ORDER BY name")
+    return [_fmt_post(r) for r in rows]
+
+
+@router.post("/")
+def create_post(body: PostCreate, user: dict = Depends(admin_only)):
+    execute("""
+        INSERT INTO posts (name, location, region, latitude, longitude)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (body.name, body.location, body.region, body.latitude, body.longitude))
+    return {"ok": True}
+
+
+@router.get("/{post_id}")
+def get_post(post_id: str, user: dict = Depends(any_role)):
+    row = fetchone("SELECT * FROM posts WHERE id=%s", (post_id,))
+    if not row: raise HTTPException(404, "Пост не знайдено")
+    return _fmt_post(row)
+
+
+@router.patch("/{post_id}")
+def update_post(post_id: str, body: PostUpdate, user: dict = Depends(admin_only)):
+    fields = {k: v for k, v in body.model_dump(exclude_none=True).items()
+              if k in {"name","location","region","latitude","longitude","is_active"}}
+    if not fields: raise HTTPException(400, "Немає полів")
+    set_clause = ", ".join(f"{k}=%s" for k in fields)
+    execute(f"UPDATE posts SET {set_clause}, updated_at=NOW() WHERE id=%s",
+            (*fields.values(), post_id))
+    return {"ok": True}
+
+
+@router.delete("/{post_id}")
+def delete_post(post_id: str, user: dict = Depends(admin_only)):
+    execute("DELETE FROM posts WHERE id=%s", (post_id,))
+    return {"ok": True}
+
+
+# ── ПРИЛАДИ ─────────────────────────────────────────────────
+
+@router.get("/{post_id}/devices")
+def get_devices(post_id: str, user: dict = Depends(any_role)):
+    rows = fetchall("SELECT * FROM devices WHERE post_id=%s ORDER BY type", (post_id,))
+    return [_fmt_device(r) for r in rows]
+
+
+@router.post("/{post_id}/devices")
+async def create_device(post_id: str, body: DeviceCreate, user: dict = Depends(admin_only)):
+    if not fetchone("SELECT id FROM posts WHERE id=%s", (post_id,)):
+        raise HTTPException(404, "Пост не знайдено")
+
+    # Перевіряємо чи порт вже зайнятий іншим приладом
+    existing = fetchone("SELECT id, name FROM devices WHERE serial_port=%s",
+                        (f"{body.host}:{body.port}",))
+    if existing:
+        raise HTTPException(400, f"Порт {body.port} вже використовує прилад '{existing['name']}'")
+
+    execute("""
+        INSERT INTO devices (post_id, type, name, serial_port)
+        VALUES (%s, %s, %s, %s)
+    """, (post_id, body.type, body.name, f"{body.host}:{body.port}"))
+
+    # Повідомляємо колектор — він одразу почне слухати новий порт
+    await notify_collector()
+    return {"ok": True}
+
+
+@router.patch("/{post_id}/devices/{device_id}")
+async def update_device(post_id: str, device_id: str,
+                        body: DeviceUpdate, user: dict = Depends(admin_only)):
+    dev = fetchone("SELECT * FROM devices WHERE id=%s AND post_id=%s",
+                   (device_id, post_id))
+    if not dev: raise HTTPException(404, "Прилад не знайдено")
+
+    fields = {}
+    if body.name: fields["name"] = body.name
+
+    # Оновлення IP або порту
+    old_sp = dev["serial_port"] or "0.0.0.0:0"
+    old_parts = old_sp.rsplit(":", 1)
+    old_host = old_parts[0] if len(old_parts) == 2 else "0.0.0.0"
+    old_port = old_parts[1] if len(old_parts) == 2 else "0"
+
+    new_host = body.host if body.host is not None else old_host
+    new_port = str(body.port) if body.port is not None else old_port
+    new_sp   = f"{new_host}:{new_port}"
+
+    if new_sp != old_sp:
+        # Перевіряємо конфлікт портів
+        conflict = fetchone(
+            "SELECT id FROM devices WHERE serial_port=%s AND id!=%s",
+            (new_sp, device_id)
+        )
+        if conflict:
+            raise HTTPException(400, f"Порт {new_port} вже зайнятий")
+        fields["serial_port"] = new_sp
+
+    if not fields: raise HTTPException(400, "Немає полів для оновлення")
+
+    set_clause = ", ".join(f"{k}=%s" for k in fields)
+    execute(f"UPDATE devices SET {set_clause} WHERE id=%s AND post_id=%s",
+            (*fields.values(), device_id, post_id))
+
+    # Повідомляємо колектор — він зупинить старий сервер і запустить новий
+    await notify_collector()
+    return {"ok": True}
+
+
+@router.delete("/{post_id}/devices/{device_id}")
+async def delete_device(post_id: str, device_id: str, user: dict = Depends(admin_only)):
+    execute("DELETE FROM devices WHERE id=%s AND post_id=%s", (device_id, post_id))
+    await notify_collector()
+    return {"ok": True}
+
+
+@router.get("/{post_id}/summary")
+def post_summary(post_id: str, user: dict = Depends(any_role)):
+    devices  = fetchall("SELECT * FROM devices WHERE post_id=%s", (post_id,))
+    readings = fetchall("""
+        SELECT DISTINCT ON (device_id, parameter)
+               device_id, parameter, value, unit, recorded_at
+        FROM   measurements WHERE post_id=%s
+        ORDER  BY device_id, parameter, recorded_at DESC
+    """, (post_id,))
+    alarms = fetchone("""
+        SELECT COUNT(*) FILTER (WHERE level='CRITICAL') AS crit,
+               COUNT(*) FILTER (WHERE level='WARNING')  AS warn
+        FROM   alarms WHERE post_id=%s AND status='ACTIVE'
+    """, (post_id,))
+    return {
+        "devices":  [_fmt_device(d) for d in devices],
+        "readings": [_fmt_meas(r) for r in readings],
+        "alarms":   {"critical": int(alarms["crit"]),
+                     "warning":  int(alarms["warn"])} if alarms else {"critical":0,"warning":0},
+    }
+
+
+def _fmt_post(r):
+    return {"id":str(r["id"]),"name":r["name"],"location":r["location"],
+            "region":r["region"],
+            "latitude":float(r["latitude"]) if r.get("latitude") else None,
+            "longitude":float(r["longitude"]) if r.get("longitude") else None,
+            "is_active":r["is_active"],
+            "created_at":r["created_at"].isoformat() if r.get("created_at") else None}
+
+def _fmt_device(r):
+    sp=r.get("serial_port") or ""
+    parts=sp.rsplit(":",1)
+    host=parts[0] if len(parts)==2 else sp
+    port=int(parts[1]) if len(parts)==2 and parts[1].isdigit() else None
+    return {"id":str(r["id"]),"post_id":str(r["post_id"]),"type":r["type"],
+            "name":r["name"],"host":host,"port":port,"serial_port":sp,
+            "is_online":r["is_online"],
+            "last_seen":r["last_seen"].isoformat() if r.get("last_seen") else None}
+
+def _fmt_meas(r):
+    return {k:(str(v) if hasattr(v,"hex") else v.isoformat() if hasattr(v,"isoformat")
+               else float(v) if hasattr(v,"__float__") else v) for k,v in r.items()}
