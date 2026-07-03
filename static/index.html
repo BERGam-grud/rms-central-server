@@ -438,6 +438,9 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
           <div class="page-actions"><button class="btn-add" onclick="openUM()">+ Новий користувач</button></div>
         </div>
         <div class="table-card">
+          <div class="table-toolbar">
+            <input class="fi" id="users-search" placeholder="Пошук за логіном або email..." oninput="filterUsers()" style="width:220px"/>
+          </div>
           <table>
             <thead><tr><th>Логін</th><th>Email</th><th>Роль</th><th>Пост</th><th>Останній вхід</th><th>Статус</th><th></th></tr></thead>
             <tbody id="users-tbody"></tbody>
@@ -522,21 +525,39 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
 
 <!-- MODAL: Користувач -->
 <div class="modal-overlay" id="user-modal">
-  <div class="modal">
-    <div class="modal-header">Новий користувач<span class="modal-close" onclick="closeUM()">×</span></div>
+  <div class="modal" style="width:500px">
+    <div class="modal-header">
+      <span id="um-title">Новий користувач</span>
+      <span class="modal-close" onclick="closeUM()">×</span>
+    </div>
     <div class="modal-body">
-      <div class="fg"><label>Логін</label><input class="fi" style="width:100%" id="nu"/></div>
-      <div class="fg"><label>Email</label><input class="fi" style="width:100%" id="ne" type="email"/></div>
-      <div class="fg"><label>Пароль</label><input class="fi" style="width:100%" id="np" type="password"/></div>
+      <div class="modal-section" id="um-section-creds">Облікові дані</div>
+      <div class="fg"><label>Логін</label><input class="fi" style="width:100%" id="nu" placeholder="username"/></div>
+      <div class="fg"><label>Email</label><input class="fi" style="width:100%" id="ne" type="email" placeholder="user@example.com"/></div>
+      <div class="fg" id="um-pass-group">
+        <label id="um-pass-label">Пароль</label>
+        <input class="fi" style="width:100%" id="np" type="password" placeholder="мін. 6 символів"/>
+      </div>
+      <div class="modal-section">Роль та доступ</div>
       <div class="fg"><label>Роль</label>
         <select class="fi" style="width:100%" id="nr">
-          <option value="guest">Гість</option><option value="operator">Оператор</option><option value="admin">Адміністратор</option>
+          <option value="guest">Гість — тільки перегляд</option>
+          <option value="operator">Оператор — керування постом</option>
+          <option value="admin">Адміністратор — повний доступ</option>
         </select>
+      </div>
+      <div class="fg"><label>Прив'язка до посту <span style="color:var(--text-dim)">(для операторів)</span></label>
+        <select class="fi" style="width:100%" id="nu-post">
+          <option value="">— Всі пости (адмін/гість) —</option>
+        </select>
+      </div>
+      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:11px;color:var(--text-sec)" id="um-hint">
+        Оператор бачить тільки дані свого посту. Адмін і гість мають доступ до всіх постів.
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-cancel" onclick="closeUM()">Скасувати</button>
-      <button class="btn-save" onclick="createUser()">Створити</button>
+      <button class="btn-save" onclick="saveUser()">Зберегти</button>
     </div>
   </div>
 </div>
@@ -1133,26 +1154,114 @@ async function deleteDev(postId,devId,name){
 }
 
 // ── USERS ────────────────────────────────────────────────────
+let allUsers=[], editUserId=null;
+
 async function loadUsers(){
   const data=await api('/api/users/'); if(!data) return;
+  allUsers=data; renderUsers(data);
+}
+
+function filterUsers(){
+  const q=document.getElementById('users-search').value.toLowerCase();
+  renderUsers(allUsers.filter(u=>!q||u.username.toLowerCase().includes(q)||u.email.toLowerCase().includes(q)));
+}
+
+function renderUsers(data){
   document.getElementById('users-tbody').innerHTML=data.map(u=>`<tr>
-    <td class="val">${u.username}</td><td>${u.email}</td>
+    <td class="val">${u.username}</td>
+    <td>${u.email}</td>
     <td><span class="role-badge role-${u.role}">${u.role}</span></td>
     <td>${u.post_name||'—'}</td>
     <td style="font-family:var(--font-mono);font-size:11px">${u.last_login?fmt(u.last_login):'—'}</td>
     <td><span class="sb ${u.is_active?'s-RESOLVED':'s-IGNORED'}">${u.is_active?'Активний':'Заблокований'}</span></td>
-    <td>${u.id!==me.id?`<button class="btn-sm" onclick="toggleUser('${u.id}',${!u.is_active})">${u.is_active?'Блок':'Розблок'}</button>`:''}</td>
+    <td style="display:flex;gap:4px">
+      ${u.id!==me.id?`
+        <button class="btn-sm" onclick="openEditUser('${u.id}')">✎ Редагувати</button>
+        <button class="btn-sm ${u.is_active?'red':''}" onclick="toggleUser('${u.id}',${!u.is_active})">
+          ${u.is_active?'Блок':'Розблок'}
+        </button>
+      `:'<span style="font-size:11px;color:var(--text-dim)">це ви</span>'}
+    </td>
   </tr>`).join('');
 }
-function openUM(){document.getElementById('user-modal').classList.add('open');}
-function closeUM(){document.getElementById('user-modal').classList.remove('open');}
-async function createUser(){
-  const body={username:document.getElementById('nu').value.trim(),email:document.getElementById('ne').value.trim(),password:document.getElementById('np').value,role:document.getElementById('nr').value};
-  if(!body.username||!body.email||!body.password){toast('Заповніть всі поля','error');return;}
-  const r=await api('/api/users/','POST',body);
-  if(r?.ok){closeUM();loadUsers();toast('Користувача створено','success');}
+
+async function openUM(){
+  editUserId=null;
+  document.getElementById('um-title').textContent='Новий користувач';
+  document.getElementById('um-pass-label').textContent='Пароль';
+  document.getElementById('um-pass-group').style.display='';
+  document.getElementById('nu').value='';
+  document.getElementById('ne').value='';
+  document.getElementById('np').value='';
+  document.getElementById('nr').value='guest';
+  document.getElementById('nu-post').value='';
+  // Завантажуємо пости для вибору
+  await loadPostsForSelect();
+  document.getElementById('user-modal').classList.add('open');
 }
-async function toggleUser(id,active){await api('/api/users/'+id,'PATCH',{is_active:active});loadUsers();toast(active?'Розблоковано':'Заблоковано','success');}
+
+async function openEditUser(userId){
+  editUserId=userId;
+  const u=allUsers.find(x=>x.id===userId); if(!u) return;
+  document.getElementById('um-title').textContent=`Редагувати: ${u.username}`;
+  document.getElementById('um-pass-label').textContent='Новий пароль (залиште порожнім щоб не змінювати)';
+  document.getElementById('nu').value=u.username;
+  document.getElementById('ne').value=u.email;
+  document.getElementById('np').value='';
+  document.getElementById('nr').value=u.role;
+  await loadPostsForSelect(u.post_id);
+  document.getElementById('user-modal').classList.add('open');
+}
+
+async function loadPostsForSelect(selectedPostId=null){
+  const sel=document.getElementById('nu-post');
+  sel.innerHTML='<option value="">— Всі пости (адмін/гість) —</option>';
+  const posts=await api('/api/posts/');
+  if(posts) posts.forEach(p=>{
+    const opt=document.createElement('option');
+    opt.value=p.id; opt.textContent=p.name;
+    if(p.id===selectedPostId) opt.selected=true;
+    sel.appendChild(opt);
+  });
+}
+
+function closeUM(){
+  document.getElementById('user-modal').classList.remove('open');
+  editUserId=null;
+}
+
+async function saveUser(){
+  const username=document.getElementById('nu').value.trim();
+  const email=document.getElementById('ne').value.trim();
+  const password=document.getElementById('np').value;
+  const role=document.getElementById('nr').value;
+  const post_id=document.getElementById('nu-post').value||null;
+
+  if(!username||!email){toast('Заповніть логін та email','error');return;}
+
+  if(editUserId){
+    // Редагування
+    const body={username,email,role,post_id:post_id||''};
+    if(password){
+      if(password.length<6){toast('Пароль мінімум 6 символів','error');return;}
+      body.password=password;
+    }
+    const r=await api('/api/users/'+editUserId,'PATCH',body);
+    if(r?.ok){closeUM();loadUsers();toast('Користувача оновлено','success');}
+  } else {
+    // Створення
+    if(!password){toast('Введіть пароль','error');return;}
+    if(password.length<6){toast('Пароль мінімум 6 символів','error');return;}
+    const r=await api('/api/users/','POST',{username,email,password,role,post_id});
+    if(r?.ok){closeUM();loadUsers();toast('Користувача створено','success');}
+  }
+}
+
+async function toggleUser(id,active){
+  await api('/api/users/'+id,'PATCH',{is_active:active});
+  loadUsers();
+  toast(active?'Розблоковано':'Заблоковано','success');
+}
 
 // ── NAV ──────────────────────────────────────────────────────
 function showPage(name){
