@@ -544,17 +544,29 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
 <div id="toast-container"></div>
 
 <script>
-const API_LOCAL   = 'http://localhost:8000';
-const API_CENTRAL = 'https://rms-central-server-production.up.railway.app';   // ← вставте ваш Railway URL: 'https://rms-production.up.railway.app'
+// Автоматично визначаємо URL сервера
+// Якщо відкрито з Railway — використовуємо відносні URL
+// Якщо відкрито локально — localhost:8000
+const IS_RAILWAY = window.location.hostname.includes('railway.app') ||
+                   window.location.hostname.includes('ngrok');
+const API_LOCAL   = IS_RAILWAY ? '' : 'http://localhost:8000';
+const API_CENTRAL = 'https://rms-central-server-production.up.railway.app';
 let API = API_LOCAL;
 let currentServer = 'local';
 
+// Якщо відкрито з Railway або ngrok — одразу використовуємо поточний сервер
+if (IS_RAILWAY) {
+  API = '';  // відносні URL — запити йдуть на той самий сервер
+}
+
 function switchServer(type) {
-  if (type === 'central' && !API_CENTRAL) {
-    toast('Вкажіть API_CENTRAL URL в index.html', 'error'); return;
-  }
   currentServer = type;
-  API = type === 'central' ? API_CENTRAL : API_LOCAL;
+  if (type === 'central') {
+    API = API_CENTRAL;
+  } else {
+    // Локальний: якщо ми на Railway — відносні URL, інакше localhost
+    API = IS_RAILWAY ? '' : 'http://localhost:8000';
+  }
 
   // Оновлюємо кнопки
   document.getElementById('btn-local').classList.toggle('active', type==='local');
@@ -647,8 +659,15 @@ function boot(){
 
 // ── WEBSOCKET ───────────────────────────────────────────────
 function connectWS(){
-  const wsUrl = API.replace('https://', 'wss://').replace('http://', 'ws://');
-  ws=new WebSocket(wsUrl+'/ws/live');
+  let wsUrl;
+  if (IS_RAILWAY && currentServer === 'local') {
+    // На Railway — використовуємо поточний хост
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl = proto + '//' + window.location.host + '/ws/live';
+  } else {
+    wsUrl = API.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/live';
+  }
+  ws=new WebSocket(wsUrl);
   ws.onopen=()=>{
     wsRetry=0;
     document.getElementById('ws-status').textContent='●  онлайн';
