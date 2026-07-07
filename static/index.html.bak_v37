@@ -703,44 +703,6 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
   </div>
 </div>
 
-
-
-<!-- MODAL: Користувачі поста -->
-<div class="modal-overlay" id="post-users-modal">
-  <div class="modal" style="width:760px;max-width:95vw">
-    <div class="modal-header">
-      <span id="post-users-title">Користувачі поста</span>
-      <span class="modal-close" onclick="closePostUsersModal()">×</span>
-    </div>
-    <div class="modal-body">
-      <div class="modal-section">Прив'язані користувачі</div>
-      <div class="table-card" style="max-height:280px;overflow:auto;margin-bottom:12px">
-        <table>
-          <thead><tr><th>Логін</th><th>Email</th><th>Роль</th><th>Статус</th><th></th></tr></thead>
-          <tbody id="post-users-assigned">
-            <tr><td colspan="5" class="empty-state">Завантаження...</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="modal-section">Додати користувача до поста</div>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
-        <div class="fg">
-          <label>Користувач</label>
-          <select class="fi" style="width:100%" id="post-users-select"></select>
-        </div>
-        <button class="btn-save" onclick="assignSelectedUserToPost()">Прив'язати</button>
-      </div>
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:11px;color:var(--text-sec);margin-top:10px">
-        Оператор або гість із прив'язкою до поста у локальному режимі бачитиме тільки цей пост. Адміністратор у центральному режимі бачить усю систему.
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-cancel" onclick="closePostUsersModal()">Закрити</button>
-    </div>
-  </div>
-</div>
-
 <div id="toast-container"></div>
 
 <script>
@@ -1384,7 +1346,6 @@ function renderPostsList(posts){
       <div class="post-stats" id="ps-stats-${p.id}"><span class="post-stat ps-ok">Завантаження...</span></div>
       ${me.role==='admin'?`<div style="display:flex;gap:6px;margin-top:8px">
         <button class="btn-sm" onclick="event.stopPropagation();openDevModal('${p.id}','','','','',0)">+ Прилад</button>
-        <button class="btn-sm" onclick="event.stopPropagation();openPostUsers('${p.id}','${(p.name||'').replace(/'/g,'`')}')">👥 Користувачі</button>
         <button class="btn-sm" onclick="event.stopPropagation();openPostWorkspace('${p.id}')">Редагувати</button>
         <button class="btn-sm red" onclick="event.stopPropagation();deletePost('${p.id}','${p.name}')">Видалити</button>
       </div>`:''}
@@ -1533,84 +1494,6 @@ async function deleteDev(postId,devId,name){
   if(!confirm(`Видалити прилад "${name}"?`)) return;
   const r=await api(`/api/posts/${postId}/devices/${devId}`,'DELETE');
   if(r?.ok){loadDevices();if(adminPostId){await loadPostAdminDevices();await loadPosts();}toast('Видалено','success');}
-}
-
-
-
-// ── POST USERS BINDING ─────────────────────────────────────
-let postUsersCurrentPostId = null;
-let postUsersCurrentPostName = '';
-
-function escHtml(s){
-  return String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-}
-
-async function openPostUsers(postId, postName){
-  if(me.role !== 'admin'){
-    toast('Доступно тільки адміністратору', 'error');
-    return;
-  }
-  postUsersCurrentPostId = postId;
-  postUsersCurrentPostName = postName || '';
-  document.getElementById('post-users-title').textContent = `Користувачі поста: ${postUsersCurrentPostName}`;
-  document.getElementById('post-users-modal').classList.add('open');
-  await loadPostUsers();
-}
-
-function closePostUsersModal(){
-  document.getElementById('post-users-modal').classList.remove('open');
-  postUsersCurrentPostId = null;
-}
-
-async function loadPostUsers(){
-  if(!postUsersCurrentPostId) return;
-  const data = await api(`/api/posts/${postUsersCurrentPostId}/users`);
-  if(!data) return;
-
-  const tbody = document.getElementById('post-users-assigned');
-  if(!data.assigned?.length){
-    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);padding:14px">До цього поста ще не прив’язано користувачів</td></tr>';
-  }else{
-    tbody.innerHTML = data.assigned.map(u => `<tr>
-      <td class="val">${escHtml(u.username)}</td>
-      <td>${escHtml(u.email)}</td>
-      <td><span class="role-badge role-${escHtml(u.role)}">${escHtml(u.role)}</span></td>
-      <td><span class="sb ${u.is_active?'s-RESOLVED':'s-IGNORED'}">${u.is_active?'Активний':'Заблокований'}</span></td>
-      <td style="text-align:right">
-        ${u.id!==me.id?`<button class="btn-sm red" onclick="unassignUserFromPost('${u.id}')">Відв'язати</button>`:'<span style="font-size:11px;color:var(--text-dim)">це ви</span>'}
-      </td>
-    </tr>`).join('');
-  }
-
-  const sel = document.getElementById('post-users-select');
-  sel.innerHTML = '<option value="">— оберіть користувача —</option>';
-  (data.available || []).forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u.id;
-    opt.textContent = `${u.username} · ${u.email} · ${u.role}`;
-    sel.appendChild(opt);
-  });
-}
-
-async function assignSelectedUserToPost(){
-  const userId = document.getElementById('post-users-select').value;
-  if(!userId){toast('Оберіть користувача', 'error'); return;}
-  const r = await api(`/api/posts/${postUsersCurrentPostId}/users/${userId}`, 'POST', {});
-  if(r?.ok){
-    toast('Користувача прив’язано до поста', 'success');
-    await loadPostUsers();
-    if(typeof loadUsers === 'function') loadUsers();
-  }
-}
-
-async function unassignUserFromPost(userId){
-  if(!confirm('Відв’язати користувача від цього поста?')) return;
-  const r = await api(`/api/posts/${postUsersCurrentPostId}/users/${userId}`, 'DELETE');
-  if(r?.ok){
-    toast('Користувача відв’язано', 'success');
-    await loadPostUsers();
-    if(typeof loadUsers === 'function') loadUsers();
-  }
 }
 
 // ── USERS ────────────────────────────────────────────────────

@@ -102,78 +102,6 @@ def delete_post(post_id: str, user: dict = Depends(admin_only)):
     return {"ok": True}
 
 
-
-
-# ── КОРИСТУВАЧІ ПОСТА ───────────────────────────────────────
-
-@router.get("/{post_id}/users")
-def get_post_users(post_id: str, user: dict = Depends(admin_only)):
-    """Адмін: користувачі, прив'язані до конкретного поста, та доступні для прив'язки."""
-    post = fetchone("SELECT id, name FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,))
-    if not post:
-        raise HTTPException(404, "Пост не знайдено")
-
-    assigned = fetchall("""
-        SELECT id, username, email, role, post_id, is_active, last_login, created_at
-        FROM users
-        WHERE post_id=%s
-          AND deleted_at IS NULL
-        ORDER BY role, username
-    """, (post_id,))
-
-    available = fetchall("""
-        SELECT id, username, email, role, post_id, is_active, last_login, created_at
-        FROM users
-        WHERE deleted_at IS NULL
-          AND is_active=TRUE
-          AND (post_id IS NULL OR post_id<>%s)
-        ORDER BY role, username
-    """, (post_id,))
-
-    return {
-        "ok": True,
-        "post": _fmt_post(post),
-        "assigned": [_fmt_post_user(u) for u in assigned],
-        "available": [_fmt_post_user(u) for u in available],
-    }
-
-
-@router.post("/{post_id}/users/{user_id}")
-def bind_user_to_post(post_id: str, user_id: str, user: dict = Depends(admin_only)):
-    """Адмін: прив'язати користувача до поста."""
-    post = fetchone("SELECT id FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,))
-    if not post:
-        raise HTTPException(404, "Пост не знайдено")
-
-    target = fetchone("SELECT id, username, role FROM users WHERE id=%s AND deleted_at IS NULL", (user_id,))
-    if not target:
-        raise HTTPException(404, "Користувача не знайдено")
-
-    execute("""
-        UPDATE users
-        SET post_id=%s,
-            updated_at=NOW()
-        WHERE id=%s
-    """, (post_id, user_id))
-    return {"ok": True}
-
-
-@router.delete("/{post_id}/users/{user_id}")
-def unbind_user_from_post(post_id: str, user_id: str, user: dict = Depends(admin_only)):
-    """Адмін: відв'язати користувача від поста."""
-    target = fetchone("SELECT id FROM users WHERE id=%s AND post_id=%s AND deleted_at IS NULL", (user_id, post_id))
-    if not target:
-        raise HTTPException(404, "Користувача не знайдено у цьому пості")
-
-    execute("""
-        UPDATE users
-        SET post_id=NULL,
-            updated_at=NOW()
-        WHERE id=%s
-    """, (user_id,))
-    return {"ok": True}
-
-
 # ── ПРИЛАДИ ─────────────────────────────────────────────────
 
 @router.get("/{post_id}/devices")
@@ -299,20 +227,6 @@ def _fmt_device(r):
             "name":r["name"],"host":host,"port":port,"serial_port":sp,
             "is_online":r["is_online"],
             "last_seen":r["last_seen"].isoformat() if r.get("last_seen") else None}
-
-
-
-def _fmt_post_user(r):
-    return {
-        "id": str(r["id"]),
-        "username": r.get("username"),
-        "email": r.get("email"),
-        "role": r.get("role"),
-        "post_id": str(r["post_id"]) if r.get("post_id") else None,
-        "is_active": r.get("is_active"),
-        "last_login": r["last_login"].isoformat() if r.get("last_login") else None,
-        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
-    }
 
 def _fmt_meas(r):
     return {k:(str(v) if hasattr(v,"hex") else v.isoformat() if hasattr(v,"isoformat")
