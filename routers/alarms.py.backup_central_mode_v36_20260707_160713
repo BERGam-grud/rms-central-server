@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from core.auth import any_role, operator_only, admin_only
+from core.auth import any_role, operator_only
 from core.database import fetchall, fetchone, execute
 from core.notifications import enqueue_alarm
 
@@ -15,7 +15,7 @@ def get_alarms(
     status:  Optional[str] = Query(None),
     level:   Optional[str] = Query(None),
     limit:   int = Query(default=200, le=2000),
-    user: dict = Depends(admin_only)
+    user: dict = Depends(any_role)
 ):
     where, params = [], []
     if post_id: where.append("a.post_id = %s"); params.append(post_id)
@@ -40,7 +40,7 @@ def get_alarms(
 
 
 @router.get("/active/count")
-def active_count(user: dict = Depends(admin_only)):
+def active_count(user: dict = Depends(any_role)):
     rows = fetchall("""
         SELECT level, COUNT(*) AS cnt FROM alarms
         WHERE  status = 'ACTIVE' GROUP BY level

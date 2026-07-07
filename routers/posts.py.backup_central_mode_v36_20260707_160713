@@ -55,7 +55,7 @@ async def notify_collector():
 # ── ПОСТИ ───────────────────────────────────────────────────
 
 @router.get("/")
-def get_posts(user: dict = Depends(admin_only)):
+def get_posts(user: dict = Depends(any_role)):
     if user["role"] == "operator" and user["post_id"]:
         rows = fetchall("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL AND deleted_at IS NULL", (str(user["post_id"]),))
     else:
@@ -73,7 +73,7 @@ def create_post(body: PostCreate, user: dict = Depends(admin_only)):
 
 
 @router.get("/{post_id}")
-def get_post(post_id: str, user: dict = Depends(admin_only)):
+def get_post(post_id: str, user: dict = Depends(any_role)):
     row = fetchone("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL AND deleted_at IS NULL", (post_id,))
     if not row: raise HTTPException(404, "Пост не знайдено")
     return _fmt_post(row)
@@ -105,7 +105,7 @@ def delete_post(post_id: str, user: dict = Depends(admin_only)):
 # ── ПРИЛАДИ ─────────────────────────────────────────────────
 
 @router.get("/{post_id}/devices")
-def get_devices(post_id: str, user: dict = Depends(admin_only)):
+def get_devices(post_id: str, user: dict = Depends(any_role)):
     rows = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL AND deleted_at IS NULL ORDER BY type", (post_id,))
     return [_fmt_device(r) for r in rows]
 
@@ -187,7 +187,7 @@ async def delete_device(post_id: str, device_id: str, user: dict = Depends(admin
 
 
 @router.get("/{post_id}/summary")
-def post_summary(post_id: str, user: dict = Depends(admin_only)):
+def post_summary(post_id: str, user: dict = Depends(any_role)):
     devices  = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL AND deleted_at IS NULL", (post_id,))
     readings = fetchall("""
         SELECT DISTINCT ON (device_id, parameter)

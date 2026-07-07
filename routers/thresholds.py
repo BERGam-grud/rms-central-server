@@ -20,7 +20,7 @@ class ThresholdBody(BaseModel):
 
 
 @router.get("/")
-def list_thresholds(user: dict = Depends(any_role)):
+def list_thresholds(user: dict = Depends(admin_only)):
     rows = fetchall("""
         SELECT t.*, p.name AS post_name, d.name AS device_name
         FROM   thresholds t
