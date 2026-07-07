@@ -1180,6 +1180,7 @@ function renderUsers(data){
         <button class="btn-sm ${u.is_active?'red':''}" onclick="toggleUser('${u.id}',${!u.is_active})">
           ${u.is_active?'Блок':'Розблок'}
         </button>
+        <button class="btn-sm red" onclick="deleteUser('${u.id}','${String(u.username).replace(/'/g, '&apos;')}')">🗑 Видалити</button>
       `:'<span style="font-size:11px;color:var(--text-dim)">це ви</span>'}
     </td>
   </tr>`).join('');
@@ -1261,6 +1262,15 @@ async function toggleUser(id,active){
   await api('/api/users/'+id,'PATCH',{is_active:active});
   loadUsers();
   toast(active?'Розблоковано':'Заблоковано','success');
+}
+
+async function deleteUser(id,username){
+  if(!confirm(`Видалити користувача "${username}"?\n\nКористувач буде прихований у веб-інтерфейсі, але запис залишиться в БД для синхронізації.`)) return;
+  const r=await api('/api/users/'+id,'DELETE');
+  if(r?.ok){
+    await loadUsers();
+    toast('Користувача видалено','success');
+  }
 }
 
 // ── NAV ──────────────────────────────────────────────────────
