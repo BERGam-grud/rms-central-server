@@ -28,11 +28,11 @@ def verify_key(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Invalid sync API key")
 
 
-def get_table_config(table: str) -> dict[str, Any]:
-    cfg = ALLOWED_TABLES.get(table)
-    if not cfg:
+def cfg(table: str) -> dict[str, Any]:
+    item = ALLOWED_TABLES.get(table)
+    if not item:
         raise HTTPException(status_code=400, detail=f"Table is not allowed for sync: {table}")
-    return cfg
+    return item
 
 
 class PushBody(BaseModel):
@@ -42,7 +42,7 @@ class PushBody(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
-def get_existing_columns(conn, table: str) -> set[str]:
+def existing_columns(conn, table: str) -> set[str]:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -58,90 +58,96 @@ def get_existing_columns(conn, table: str) -> set[str]:
 def upsert_rows(conn, table: str, pk_cols: tuple[str, ...], updated_col: str, rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
-    existing_cols = get_existing_columns(conn, table)
-    count = 0
+    cols_existing = existing_columns(conn, table)
+    applied = 0
     with conn.cursor() as cur:
-        for raw_row in rows:
-            row = {k: v for k, v in raw_row.items() if k in existing_cols}
-            if not row:
-                continue
-            missing_pk = [c for c in pk_cols if c not in row]
-            if missing_pk:
+        for raw in rows:
+            row = {k: v for k, v in raw.items() if k in cols_existing}
+            if not row or any(pk not in row for pk in pk_cols):
                 continue
 
             cols = list(row.keys())
             update_cols = [c for c in cols if c not in pk_cols]
 
-            insert = sql.SQL("INSERT INTO {table} ({cols}) VALUES ({values})").format(
+            insert_sql = sql.SQL("INSERT INTO {table} ({cols}) VALUES ({values})").format(
                 table=sql.Identifier(table),
                 cols=sql.SQL(", ").join(map(sql.Identifier, cols)),
                 values=sql.SQL(", ").join(sql.Placeholder() * len(cols)),
             )
-            conflict = sql.SQL(" ON CONFLICT ({pk}) ").format(
+            conflict_sql = sql.SQL(" ON CONFLICT ({pk}) ").format(
                 pk=sql.SQL(", ").join(map(sql.Identifier, pk_cols))
             )
+
             if update_cols:
                 assignments = sql.SQL(", ").join(
                     sql.SQL("{col}=EXCLUDED.{col}").format(col=sql.Identifier(c))
                     for c in update_cols
                 )
-                where = sql.SQL("")
-                if updated_col in cols and updated_col in existing_cols:
-                    where = sql.SQL(" WHERE {table}.{updated} <= EXCLUDED.{updated}").format(
+                # Newer update wins. This is what transports deleted_at too.
+                where_sql = sql.SQL("")
+                if updated_col in cols and updated_col in cols_existing:
+                    where_sql = sql.SQL(" WHERE {table}.{updated} <= EXCLUDED.{updated}").format(
                         table=sql.Identifier(table),
                         updated=sql.Identifier(updated_col),
                     )
-                query = insert + conflict + sql.SQL("DO UPDATE SET ") + assignments + where
+                q = insert_sql + conflict_sql + sql.SQL("DO UPDATE SET ") + assignments + where_sql
             else:
-                query = insert + conflict + sql.SQL("DO NOTHING")
-            cur.execute(query, [row[c] for c in cols])
-            count += 1
+                q = insert_sql + conflict_sql + sql.SQL("DO NOTHING")
+
+            cur.execute(q, [row[c] for c in cols])
+            applied += cur.rowcount if cur.rowcount >= 0 else 1
     conn.commit()
-    return count
+    return applied
 
 
 @router.post("/push")
-async def push(body: PushBody, request: Request):
+def push(body: PushBody, request: Request):
     verify_key(request)
-    cfg = get_table_config(body.table)
-    pk_cols = tuple(body.primary_key or cfg["pk"])
-    if pk_cols != tuple(cfg["pk"]):
-        raise HTTPException(status_code=400, detail="Primary key mismatch")
-    if body.updated_column != cfg["updated"]:
-        raise HTTPException(status_code=400, detail="Updated column mismatch")
-
+    table_cfg = cfg(body.table)
+    pk_cols = tuple(body.primary_key) if body.primary_key else table_cfg["pk"]
+    updated_col = body.updated_column or table_cfg["updated"]
+    if tuple(pk_cols) != tuple(table_cfg["pk"]):
+        raise HTTPException(400, "Invalid primary key for table")
     with get_conn() as conn:
-        saved = upsert_rows(conn, body.table, pk_cols, cfg["updated"], body.rows)
-    return {"ok": True, "table": body.table, "saved": saved}
+        applied = upsert_rows(conn, body.table, pk_cols, updated_col, body.rows)
+    return {"ok": True, "table": body.table, "received": len(body.rows), "applied": applied}
 
 
 @router.get("/pull")
-async def pull(
+def pull(
     request: Request,
     table: str = Query(...),
     since: str = Query("1970-01-01T00:00:00+00:00"),
-    limit: int = Query(300, ge=1, le=5000),
+    limit: int = Query(500, ge=1, le=5000),
 ):
     verify_key(request)
-    cfg = get_table_config(table)
-    updated = cfg["updated"]
+    table_cfg = cfg(table)
+    updated_col = table_cfg["updated"]
     with get_conn() as conn:
-        existing_cols = get_existing_columns(conn, table)
-        if updated not in existing_cols:
-            raise HTTPException(status_code=400, detail=f"Table has no {updated} column")
+        cols = existing_columns(conn, table)
+        if updated_col not in cols:
+            raise HTTPException(400, f"Table {table} has no {updated_col}")
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                sql.SQL("SELECT * FROM {table} WHERE {updated} > %s ORDER BY {updated} ASC LIMIT %s").format(
-                    table=sql.Identifier(table),
-                    updated=sql.Identifier(updated),
-                ),
-                (since, limit),
+            q = sql.SQL("SELECT * FROM {table} WHERE {updated} > %s ORDER BY {updated} ASC LIMIT %s").format(
+                table=sql.Identifier(table),
+                updated=sql.Identifier(updated_col),
             )
+            cur.execute(q, (since, limit))
             rows = [dict(r) for r in cur.fetchall()]
     return {"ok": True, "table": table, "rows": rows}
 
 
-@router.get("/tables")
-async def tables(request: Request):
+@router.get("/debug/{table}")
+def debug_table(request: Request, table: str, limit: int = Query(20, ge=1, le=100)):
     verify_key(request)
-    return {"ok": True, "tables": sorted(ALLOWED_TABLES.keys())}
+    table_cfg = cfg(table)
+    updated_col = table_cfg["updated"]
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            q = sql.SQL("SELECT * FROM {table} ORDER BY {updated} DESC LIMIT %s").format(
+                table=sql.Identifier(table),
+                updated=sql.Identifier(updated_col),
+            )
+            cur.execute(q, (limit,))
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"ok": True, "table": table, "rows": rows}

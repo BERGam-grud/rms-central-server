@@ -56,10 +56,7 @@ async def notify_collector():
 @router.get("/")
 def get_posts(user: dict = Depends(any_role)):
     if user["role"] == "operator" and user["post_id"]:
-        rows = fetchall(
-    "SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL",
-    (str(user["post_id"]),)
-)
+        rows = fetchall("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL", (str(user["post_id"]),))
     else:
         rows = fetchall("SELECT * FROM posts WHERE deleted_at IS NULL ORDER BY name")
     return [_fmt_post(r) for r in rows]
@@ -76,7 +73,7 @@ def create_post(body: PostCreate, user: dict = Depends(admin_only)):
 
 @router.get("/{post_id}")
 def get_post(post_id: str, user: dict = Depends(any_role)):
-    row = fetchone("SELECT * FROM posts WHERE id=%s", (post_id,))
+    row = fetchone("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,))
     if not row: raise HTTPException(404, "Пост не знайдено")
     return _fmt_post(row)
 
@@ -108,17 +105,17 @@ def delete_post(post_id: str, user: dict = Depends(admin_only)):
 
 @router.get("/{post_id}/devices")
 def get_devices(post_id: str, user: dict = Depends(any_role)):
-    rows = fetchall("SELECT * FROM devices WHERE post_id=%s ORDER BY type", (post_id,))
+    rows = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL ORDER BY type", (post_id,))
     return [_fmt_device(r) for r in rows]
 
 
 @router.post("/{post_id}/devices")
 async def create_device(post_id: str, body: DeviceCreate, user: dict = Depends(admin_only)):
-    if not fetchone("SELECT id FROM posts WHERE id=%s", (post_id,)):
+    if not fetchone("SELECT id FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,)):
         raise HTTPException(404, "Пост не знайдено")
 
     # Перевіряємо чи порт вже зайнятий іншим приладом
-    existing = fetchone("SELECT id, name FROM devices WHERE serial_port=%s",
+    existing = fetchone("SELECT id, name FROM devices WHERE serial_port=%s AND deleted_at IS NULL",
                         (f"{body.host}:{body.port}",))
     if existing:
         raise HTTPException(400, f"Порт {body.port} вже використовує прилад '{existing['name']}'")
@@ -136,7 +133,7 @@ async def create_device(post_id: str, body: DeviceCreate, user: dict = Depends(a
 @router.patch("/{post_id}/devices/{device_id}")
 async def update_device(post_id: str, device_id: str,
                         body: DeviceUpdate, user: dict = Depends(admin_only)):
-    dev = fetchone("SELECT * FROM devices WHERE id=%s AND post_id=%s",
+    dev = fetchone("SELECT * FROM devices WHERE id=%s AND post_id=%s AND deleted_at IS NULL",
                    (device_id, post_id))
     if not dev: raise HTTPException(404, "Прилад не знайдено")
 
@@ -156,7 +153,7 @@ async def update_device(post_id: str, device_id: str,
     if new_sp != old_sp:
         # Перевіряємо конфлікт портів
         conflict = fetchone(
-            "SELECT id FROM devices WHERE serial_port=%s AND id!=%s",
+            "SELECT id FROM devices WHERE serial_port=%s AND id!=%s AND deleted_at IS NULL",
             (new_sp, device_id)
         )
         if conflict:
@@ -166,7 +163,7 @@ async def update_device(post_id: str, device_id: str,
     if not fields: raise HTTPException(400, "Немає полів для оновлення")
 
     set_clause = ", ".join(f"{k}=%s" for k in fields)
-    execute(f"UPDATE devices SET {set_clause} WHERE id=%s AND post_id=%s",
+    execute(f"UPDATE devices SET {set_clause}, updated_at=NOW() WHERE id=%s AND post_id=%s",
             (*fields.values(), device_id, post_id))
 
     # Повідомляємо колектор — він зупинить старий сервер і запустить новий
@@ -176,14 +173,20 @@ async def update_device(post_id: str, device_id: str,
 
 @router.delete("/{post_id}/devices/{device_id}")
 async def delete_device(post_id: str, device_id: str, user: dict = Depends(admin_only)):
-    execute("DELETE FROM devices WHERE id=%s AND post_id=%s", (device_id, post_id))
+    execute("""
+        UPDATE devices
+        SET deleted_at = NOW(),
+            updated_at = NOW(),
+            is_online = FALSE
+        WHERE id=%s AND post_id=%s
+    """, (device_id, post_id))
     await notify_collector()
     return {"ok": True}
 
 
 @router.get("/{post_id}/summary")
 def post_summary(post_id: str, user: dict = Depends(any_role)):
-    devices  = fetchall("SELECT * FROM devices WHERE post_id=%s", (post_id,))
+    devices  = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL", (post_id,))
     readings = fetchall("""
         SELECT DISTINCT ON (device_id, parameter)
                device_id, parameter, value, unit, recorded_at

@@ -1,9 +1,3 @@
-"""Small PostgreSQL migration runner for Railway startup.
-
-It executes SQL files from ./migrations once and stores applied names in
-schema_migrations. This avoids manual SQL execution in the Railway PostgreSQL
-container.
-"""
 from __future__ import annotations
 
 import logging
@@ -15,6 +9,7 @@ log = logging.getLogger(__name__)
 
 
 def run_migrations() -> None:
+    """Run SQL files from ./migrations once at application startup."""
     base_dir = Path(__file__).resolve().parents[1]
     migrations_dir = base_dir / "migrations"
     if not migrations_dir.exists():
@@ -43,8 +38,7 @@ def run_migrations() -> None:
                 if cur.fetchone():
                     continue
                 log.info("Applying migration %s", path.name)
-                sql = path.read_text(encoding="utf-8")
-                cur.execute(sql)
+                cur.execute(path.read_text(encoding="utf-8"))
                 cur.execute("INSERT INTO schema_migrations(filename) VALUES (%s)", (path.name,))
                 conn.commit()
                 log.info("Applied migration %s", path.name)
