@@ -16,7 +16,7 @@ from routers import sync_v2
 from routers import auth, posts, measurements, alarms, users, thresholds, sync
 from routers import ws
 from core.notifications import notification_worker
-app.include_router(sync_v2.router)
+
 app = FastAPI(
     title="РМС — Центральний сервер",
     version="1.0.0",
@@ -30,7 +30,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.include_router(sync_v2.router)
 app.include_router(auth.router)
 app.include_router(posts.router)
 app.include_router(measurements.router)
