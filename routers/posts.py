@@ -56,9 +56,12 @@ async def notify_collector():
 @router.get("/")
 def get_posts(user: dict = Depends(any_role)):
     if user["role"] == "operator" and user["post_id"]:
-        rows = fetchall("SELECT * FROM posts WHERE id=%s", (str(user["post_id"]),))
+        rows = fetchall(
+    "SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL",
+    (str(user["post_id"]),)
+)
     else:
-        rows = fetchall("SELECT * FROM posts ORDER BY name")
+        rows = fetchall("SELECT * FROM posts WHERE deleted_at IS NULL ORDER BY name")
     return [_fmt_post(r) for r in rows]
 
 
@@ -91,7 +94,13 @@ def update_post(post_id: str, body: PostUpdate, user: dict = Depends(admin_only)
 
 @router.delete("/{post_id}")
 def delete_post(post_id: str, user: dict = Depends(admin_only)):
-    execute("DELETE FROM posts WHERE id=%s", (post_id,))
+    execute("""
+        UPDATE posts
+        SET deleted_at = NOW(),
+            updated_at = NOW(),
+            is_active = FALSE
+        WHERE id=%s
+    """, (post_id,))
     return {"ok": True}
 
 

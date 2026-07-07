@@ -18,6 +18,7 @@ from core.notifications import notification_worker
 from core.migrations import run_migrations
 from routers import sync_v2
 
+
 app = FastAPI(
     title="РМС — Центральний сервер",
     version="1.0.0",
