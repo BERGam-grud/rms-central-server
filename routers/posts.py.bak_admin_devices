@@ -56,7 +56,7 @@ async def notify_collector():
 @router.get("/")
 def get_posts(user: dict = Depends(any_role)):
     if user["role"] == "operator" and user["post_id"]:
-        rows = fetchall("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL AND deleted_at IS NULL", (str(user["post_id"]),))
+        rows = fetchall("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL", (str(user["post_id"]),))
     else:
         rows = fetchall("SELECT * FROM posts WHERE deleted_at IS NULL ORDER BY name")
     return [_fmt_post(r) for r in rows]
@@ -73,7 +73,7 @@ def create_post(body: PostCreate, user: dict = Depends(admin_only)):
 
 @router.get("/{post_id}")
 def get_post(post_id: str, user: dict = Depends(any_role)):
-    row = fetchone("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL AND deleted_at IS NULL", (post_id,))
+    row = fetchone("SELECT * FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,))
     if not row: raise HTTPException(404, "Пост не знайдено")
     return _fmt_post(row)
 
@@ -105,7 +105,7 @@ def delete_post(post_id: str, user: dict = Depends(admin_only)):
 
 @router.get("/{post_id}/devices")
 def get_devices(post_id: str, user: dict = Depends(any_role)):
-    rows = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL AND deleted_at IS NULL ORDER BY type", (post_id,))
+    rows = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL ORDER BY type", (post_id,))
     return [_fmt_device(r) for r in rows]
 
 
@@ -133,7 +133,7 @@ async def create_device(post_id: str, body: DeviceCreate, user: dict = Depends(a
 @router.patch("/{post_id}/devices/{device_id}")
 async def update_device(post_id: str, device_id: str,
                         body: DeviceUpdate, user: dict = Depends(admin_only)):
-    dev = fetchone("SELECT * FROM devices WHERE id=%s AND post_id=%s AND deleted_at IS NULL AND deleted_at IS NULL",
+    dev = fetchone("SELECT * FROM devices WHERE id=%s AND post_id=%s AND deleted_at IS NULL",
                    (device_id, post_id))
     if not dev: raise HTTPException(404, "Прилад не знайдено")
 
@@ -186,7 +186,7 @@ async def delete_device(post_id: str, device_id: str, user: dict = Depends(admin
 
 @router.get("/{post_id}/summary")
 def post_summary(post_id: str, user: dict = Depends(any_role)):
-    devices  = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL AND deleted_at IS NULL", (post_id,))
+    devices  = fetchall("SELECT * FROM devices WHERE post_id=%s AND deleted_at IS NULL", (post_id,))
     readings = fetchall("""
         SELECT DISTINCT ON (device_id, parameter)
                device_id, parameter, value, unit, recorded_at
