@@ -108,33 +108,50 @@ def delete_post(post_id: str, user: dict = Depends(admin_only)):
 
 @router.get("/{post_id}/users")
 def get_post_users(post_id: str, user: dict = Depends(admin_only)):
-    """Адмін: користувачі, прив'язані до конкретного поста, та доступні для прив'язки."""
-    post = fetchone("SELECT id, name FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,))
+    post = fetchone("""
+        SELECT id, name
+        FROM posts
+        WHERE id=%s AND deleted_at IS NULL
+    """, (post_id,))
+
     if not post:
-        raise HTTPException(404, "Пост не знайдено")
+        raise HTTPException(status_code=404, detail="Пост не знайдено")
 
     assigned = fetchall("""
-        SELECT id, username, email, role, post_id, is_active, last_login, created_at
+        SELECT id, username, email, role, post_id, is_active
         FROM users
         WHERE post_id=%s
           AND deleted_at IS NULL
-        ORDER BY role, username
+        ORDER BY username
     """, (post_id,))
 
     available = fetchall("""
-        SELECT id, username, email, role, post_id, is_active, last_login, created_at
+        SELECT id, username, email, role, post_id, is_active
         FROM users
         WHERE deleted_at IS NULL
           AND is_active=TRUE
           AND (post_id IS NULL OR post_id<>%s)
-        ORDER BY role, username
+        ORDER BY username
     """, (post_id,))
+
+    def fmt_user(u):
+        return {
+            "id": str(u["id"]),
+            "username": u.get("username"),
+            "email": u.get("email"),
+            "role": u.get("role"),
+            "post_id": str(u["post_id"]) if u.get("post_id") else None,
+            "is_active": u.get("is_active"),
+        }
 
     return {
         "ok": True,
-        "post": _fmt_post(post),
-        "assigned": [_fmt_post_user(u) for u in assigned],
-        "available": [_fmt_post_user(u) for u in available],
+        "post": {
+            "id": str(post["id"]),
+            "name": post.get("name"),
+        },
+        "assigned": [fmt_user(u) for u in assigned],
+        "available": [fmt_user(u) for u in available],
     }
 
 
