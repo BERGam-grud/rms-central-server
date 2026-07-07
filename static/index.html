@@ -1050,9 +1050,16 @@ function updateChartLive(){
 
 // ── CHART EXPORT ─────────────────────────────────────────────
 function expPNG(id){const c=document.getElementById('ch-'+id);if(!c)return;const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='device_'+id+'_'+ts()+'.png';a.click();toast('Збережено PNG','success');}
-function expCSV(id){const h=chartHist[id]?.rows;if(!h||!h.length)return;dl('Час,Значення
-'+h.map(x=>`${x.t.toISOString()},${x.v}`).join('
-'),'device_'+id+'_'+ts()+'.csv','text/csv');toast('Збережено CSV','success');}
+function expCSV(id){
+  const h = chartHist[id]?.rows;
+  if(!h || !h.length) return;
+
+  const csv = 'Час,Значення\n' +
+    h.map(x => `${x.t.toISOString()},${x.v}`).join('\n');
+
+  dl(csv, 'device_' + id + '_' + ts() + '.csv', 'text/csv');
+  toast('Збережено CSV','success');
+}
 function expSVG(id){
   const h=chartHist[id]?.rows;if(!h||!h.length)return;
   const W=600,H=200,PL=50,PR=10,PT=10,PB=30,W2=W-PL-PR,H2=H-PT-PB;
