@@ -36,7 +36,6 @@ class DeviceCreate(BaseModel):
     port:  int
 
 class DeviceUpdate(BaseModel):
-    type:  Optional[str] = None
     name:  Optional[str] = None
     host:  Optional[str] = None
     port:  Optional[int] = None
@@ -139,7 +138,6 @@ async def update_device(post_id: str, device_id: str,
     if not dev: raise HTTPException(404, "Прилад не знайдено")
 
     fields = {}
-    if body.type: fields["type"] = body.type
     if body.name: fields["name"] = body.name
 
     # Оновлення IP або порту
@@ -214,9 +212,7 @@ def _fmt_post(r):
             "latitude":float(r["latitude"]) if r.get("latitude") else None,
             "longitude":float(r["longitude"]) if r.get("longitude") else None,
             "is_active":r["is_active"],
-            "created_at":r["created_at"].isoformat() if r.get("created_at") else None,
-            "updated_at":r["updated_at"].isoformat() if r.get("updated_at") else None,
-            "deleted_at":r["deleted_at"].isoformat() if r.get("deleted_at") else None}
+            "created_at":r["created_at"].isoformat() if r.get("created_at") else None}
 
 def _fmt_device(r):
     sp=r.get("serial_port") or ""

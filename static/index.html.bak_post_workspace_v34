@@ -265,32 +265,6 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
 .admin-box{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:12px}
 .admin-box-title{font-size:12px;font-weight:800;color:var(--green);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}
 
-
-
-/* Admin Post Workspace v34 */
-.post-workspace-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
-.post-workspace-title{font-size:20px;font-weight:900;color:var(--text-pri)}
-.post-workspace-sub{font-size:12px;color:var(--text-sec);margin-top:4px}
-.post-workspace-grid{display:grid;grid-template-columns:360px 1fr;gap:14px;align-items:start}
-.post-workspace-card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
-.post-workspace-card-title{font-size:12px;font-weight:900;color:var(--green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
-.post-workspace-form{display:grid;gap:10px}
-.post-workspace-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-.post-mode-note{font-size:11px;color:var(--text-sec);border:1px solid var(--border);background:var(--bg-2);border-radius:var(--radius);padding:10px;margin-top:12px;line-height:1.45}
-.admin-dev-table{display:grid;gap:8px}
-.admin-dev-card{border:1px solid var(--border);background:var(--bg-2);border-radius:var(--radius);padding:12px}
-.admin-dev-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
-.admin-dev-name{font-size:14px;font-weight:900;color:var(--text-pri)}
-.admin-dev-meta{font-family:var(--font-mono);font-size:11px;color:var(--text-sec);margin-top:3px}
-.admin-dev-toolbar{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.admin-dev-settings{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;font-size:11px;color:var(--text-sec)}
-.admin-th-list{border-top:1px solid var(--border);margin-top:10px;padding-top:8px;display:grid;gap:6px}
-.admin-th-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;font-size:11px}
-.admin-th-param{font-weight:800;color:var(--text-pri)}
-.admin-th-values{font-family:var(--font-mono);color:var(--text-sec)}
-.admin-th-actions{display:flex;gap:5px;justify-content:flex-end}
-@media(max-width:1100px){.post-workspace-grid{grid-template-columns:1fr}.admin-dev-settings{grid-template-columns:1fr}}
-
 </style>
 </head>
 <body>
@@ -467,54 +441,6 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
         <div class="posts-layout">
           <div class="posts-map"><div id="map"></div></div>
           <div class="posts-list" id="posts-list"><div class="empty-state"><div class="spinner"></div></div></div>
-        </div>
-      </div>
-
-
-
-      <!-- POST WORKSPACE -->
-      <div class="page" id="page-post-detail">
-        <div class="post-workspace-header">
-          <div>
-            <div class="post-workspace-title" id="pw-title">Пост</div>
-            <div class="post-workspace-sub" id="pw-sub">Картка адміністрування поста, приладів і порогів</div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn-sm" onclick="showPage('posts')">← До списку постів</button>
-            <button class="btn-add" onclick="addDeviceFromWorkspace()">+ Прилад</button>
-          </div>
-        </div>
-
-        <div class="post-workspace-grid">
-          <div class="post-workspace-card">
-            <div class="post-workspace-card-title">Дані поста</div>
-            <div class="post-workspace-form">
-              <div class="fg"><label>Назва</label><input class="fi" style="width:100%" id="pw-name"/></div>
-              <div class="fg"><label>Регіон</label><input class="fi" style="width:100%" id="pw-region"/></div>
-              <div class="fg"><label>Локація</label><input class="fi" style="width:100%" id="pw-location"/></div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="fg"><label>Широта</label><input class="fi" style="width:100%" id="pw-lat" type="number" step="0.000001"/></div>
-                <div class="fg"><label>Довгота</label><input class="fi" style="width:100%" id="pw-lng" type="number" step="0.000001"/></div>
-              </div>
-              <label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text-sec)">
-                <input type="checkbox" id="pw-active"/> Активний пост
-              </label>
-            </div>
-            <div class="post-workspace-actions">
-              <button class="btn-save" onclick="savePostWorkspace()">Зберегти</button>
-            </div>
-            <div class="post-mode-note" id="pw-mode-note">
-              Режим <b>Центральний</b> показує та редагує дані Railway. Режим <b>Локальний</b> працює з локальною БД робочого місця. Зміни передаються між ними через Sync Engine.
-            </div>
-          </div>
-
-          <div class="post-workspace-card">
-            <div class="post-workspace-card-title">
-              <span>Прилади та налаштування</span>
-              <button class="btn-sm" onclick="refreshPostWorkspace()">Оновити</button>
-            </div>
-            <div id="pw-devices" class="admin-dev-table"><div class="empty-state"><div class="spinner"></div></div></div>
-          </div>
         </div>
       </div>
 
@@ -742,7 +668,6 @@ function switchServer(type) {
   loadDevices();
   loadAlarms();
   initCharts();
-  if(document.getElementById('page-post-detail')?.classList.contains('active')) refreshPostWorkspace();
   toast(type==='central' ? '◎ Центральний сервер' : '◉ Локальний сервер', 'success');
 }
 let token=localStorage.getItem('rms_token')||null;
@@ -1120,12 +1045,12 @@ async function saveThresh(){
   let r;
   if(threshEditId) r=await api('/api/thresholds/'+threshEditId,'PATCH',body);
   else r=await api('/api/thresholds/','POST',body);
-  if(r?.ok){closeThreshModal();loadDevices();if(postWorkspaceId){await loadWorkspaceDevices();}toast(threshEditId?'Поріг оновлено':'Поріг створено','success');}
+  if(r?.ok){closeThreshModal();loadDevices();toast(threshEditId?'Поріг оновлено':'Поріг створено','success');}
 }
 async function deleteThresh(id){
   if(!confirm('Видалити поріг?')) return;
   const r=await api('/api/thresholds/'+id,'DELETE');
-  if(r?.ok){loadDevices();if(postWorkspaceId){await loadWorkspaceDevices();}toast('Поріг видалено','success');}
+  if(r?.ok){loadDevices();toast('Поріг видалено','success');}
 }
 
 // ── ALARMS ───────────────────────────────────────────────────
@@ -1174,126 +1099,6 @@ function exportArchCSV(){if(!archData.length){toast('Виконайте пошу
 function exportArchJSON(){if(!archData.length){toast('Виконайте пошук','error');return;}dl(JSON.stringify(archData,null,2),'archive_'+ts()+'.json','application/json');toast('Збережено','success');}
 function exportDashCSV(){dl('Параметр,Значення,Одиниця,Пристрій,Пост,Час\n'+liveData.map(r=>`${r.parameter},${r.value},${r.unit},${r.device_name},${r.post_name},${r.recorded_at}`).join('\n'),'dashboard_'+ts()+'.csv','text/csv');toast('Збережено','success');}
 
-
-
-// ── POST WORKSPACE v34: адміністрування поста ───────────────
-let postWorkspaceId=null;
-let postWorkspacePost=null;
-let postWorkspaceDevices=[];
-let postWorkspaceThresholds={};
-
-async function openPostWorkspace(postId){
-  if(!me || me.role!=='admin') { toast('Доступ лише для адміністратора','error'); return; }
-  postWorkspaceId=postId;
-  showPage('post-detail');
-  await refreshPostWorkspace();
-}
-
-async function refreshPostWorkspace(){
-  if(!postWorkspaceId) return;
-  const post=await api('/api/posts/'+postWorkspaceId);
-  if(!post) return;
-  postWorkspacePost=post;
-  document.getElementById('pw-title').textContent='Пост: '+(post.name||'—');
-  document.getElementById('pw-sub').textContent=(post.location||'—')+' · '+(post.region||'—')+' · '+(currentServer==='central'?'Центральний сервер':'Локальний сервер');
-  document.getElementById('pw-name').value=post.name||'';
-  document.getElementById('pw-region').value=post.region||'';
-  document.getElementById('pw-location').value=post.location||'';
-  document.getElementById('pw-lat').value=post.latitude??'';
-  document.getElementById('pw-lng').value=post.longitude??'';
-  document.getElementById('pw-active').checked=!!post.is_active;
-  const note=document.getElementById('pw-mode-note');
-  if(note) note.innerHTML=currentServer==='central'
-    ? 'Ви редагуєте <b>центральну Railway БД</b>. Локальні пости отримають ці зміни після запуску/циклу Sync Engine.'
-    : 'Ви редагуєте <b>локальну БД</b> цього робочого місця. Зміни будуть передані на Railway через Sync Engine, якщо таблиця дозволяє push.';
-  await loadWorkspaceDevices();
-}
-
-async function savePostWorkspace(){
-  if(!postWorkspaceId) return;
-  const body={
-    name:document.getElementById('pw-name').value.trim(),
-    region:document.getElementById('pw-region').value.trim(),
-    location:document.getElementById('pw-location').value.trim(),
-    latitude:document.getElementById('pw-lat').value===''?null:parseFloat(document.getElementById('pw-lat').value),
-    longitude:document.getElementById('pw-lng').value===''?null:parseFloat(document.getElementById('pw-lng').value),
-    is_active:document.getElementById('pw-active').checked
-  };
-  if(!body.name){toast('Введіть назву поста','error');return;}
-  const r=await api('/api/posts/'+postWorkspaceId,'PATCH',body);
-  if(r?.ok){toast('Пост збережено','success'); await loadPosts(); await refreshPostWorkspace();}
-}
-
-async function loadWorkspaceDevices(){
-  const box=document.getElementById('pw-devices');
-  box.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
-  const devs=await api(`/api/posts/${postWorkspaceId}/devices`);
-  if(!devs) return;
-  postWorkspaceDevices=devs;
-  postWorkspaceThresholds={};
-  for(const d of devs){
-    postWorkspaceThresholds[d.id]=await api(`/api/thresholds/for-device?device_id=${d.id}&device_type=${d.type}&post_id=${postWorkspaceId}`)||[];
-  }
-  renderWorkspaceDevices();
-}
-
-function renderWorkspaceDevices(){
-  const box=document.getElementById('pw-devices');
-  if(!postWorkspaceDevices.length){
-    box.innerHTML='<div class="empty-state"><div class="icon">◈</div><p>На цьому посту ще немає приладів</p></div>';
-    return;
-  }
-  box.innerHTML=postWorkspaceDevices.map(d=>{
-    const th=postWorkspaceThresholds[d.id]||[];
-    return `<div class="admin-dev-card">
-      <div class="admin-dev-top">
-        <div>
-          <div class="admin-dev-name">${esc(d.name)}</div>
-          <div class="admin-dev-meta">${esc(d.id)}</div>
-        </div>
-        <div class="admin-dev-toolbar">
-          <span class="sb ${d.is_online?'s-RESOLVED':'s-IGNORED'}">${d.is_online?'Online':'Offline'}</span>
-          <button class="btn-sm" onclick="editDeviceFromWorkspace('${d.id}')">Налаштувати</button>
-          <button class="btn-sm" onclick="openThreshModal('${d.type}','${d.id}','${postWorkspaceId}',null,'','','','')">+ Поріг</button>
-          <button class="btn-sm red" onclick="deleteDeviceFromWorkspace('${d.id}','${String(d.name||'').replace(/'/g,'`')}')">Видалити</button>
-        </div>
-      </div>
-      <div class="admin-dev-settings">
-        <div><b>Тип:</b> ${esc(d.type||'—')}</div>
-        <div><b>IP:</b> ${esc(d.host||'—')}</div>
-        <div><b>TCP:</b> ${d.port||'—'}</div>
-      </div>
-      <div class="admin-th-list">
-        ${th.length?th.map(t=>`<div class="admin-th-row">
-          <div><div class="admin-th-param">${esc(t.parameter)}</div><div class="admin-th-values">⚠ ${t.warn_value} / 🔴 ${t.crit_value} ${esc(t.unit||'')}</div></div>
-          <div class="admin-th-values">${esc(t.device_type||'')}</div>
-          <div class="admin-th-actions">
-            <button class="btn-sm" onclick="openThreshModal('${d.type}','${d.id}','${postWorkspaceId}','${t.id}','${escAttr(t.parameter)}','${escAttr(t.unit||'')}',${t.warn_value},${t.crit_value})">✎</button>
-            <button class="btn-sm red" onclick="deleteThresh('${t.id}')">✕</button>
-          </div>
-        </div>`).join(''):'<div style="font-size:11px;color:var(--text-dim)">Порогів для цього приладу ще немає</div>'}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function addDeviceFromWorkspace(){
-  if(!postWorkspaceId) return;
-  openDevModal(postWorkspaceId,'','','','',0);
-}
-function editDeviceFromWorkspace(deviceId){
-  const d=postWorkspaceDevices.find(x=>x.id===deviceId);
-  if(!d) return;
-  openDevModal(postWorkspaceId,d.id,d.type,d.name,d.host,d.port||0);
-}
-async function deleteDeviceFromWorkspace(deviceId,name){
-  if(!confirm(`Видалити прилад "${name}"?`)) return;
-  const r=await api(`/api/posts/${postWorkspaceId}/devices/${deviceId}`,'DELETE');
-  if(r?.ok){toast('Прилад видалено','success');await loadWorkspaceDevices();await loadPosts();await loadDevices();}
-}
-function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function escAttr(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-
 // ── POSTS ────────────────────────────────────────────────────
 async function loadPosts(){
   const posts=await api('/api/posts/'); if(!posts) return;
@@ -1332,7 +1137,7 @@ function renderPostsList(posts){
       <div class="post-stats" id="ps-stats-${p.id}"><span class="post-stat ps-ok">Завантаження...</span></div>
       ${me.role==='admin'?`<div style="display:flex;gap:6px;margin-top:8px">
         <button class="btn-sm" onclick="event.stopPropagation();openDevModal('${p.id}','','','','',0)">+ Прилад</button>
-        <button class="btn-sm" onclick="event.stopPropagation();openPostWorkspace('${p.id}')">Редагувати</button>
+        <button class="btn-sm" onclick="event.stopPropagation();openPostAdminModal('${p.id}')">Редагувати</button>
         <button class="btn-sm red" onclick="event.stopPropagation();deletePost('${p.id}','${p.name}')">Видалити</button>
       </div>`:''}
     </div>`).join('');
