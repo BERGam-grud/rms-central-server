@@ -11,11 +11,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
+from routers import sync_v2
 
 from routers import auth, posts, measurements, alarms, users, thresholds, sync
 from routers import ws
 from core.notifications import notification_worker
-
+app.include_router(sync_v2.router)
 app = FastAPI(
     title="РМС — Центральний сервер",
     version="1.0.0",
