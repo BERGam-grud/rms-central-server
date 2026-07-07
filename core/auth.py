@@ -32,7 +32,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Невірний токен")
-    user = fetchone("SELECT * FROM users WHERE id=%s AND is_active=TRUE", (payload.get("sub"),))
+    user = fetchone("SELECT * FROM users WHERE id=%s AND is_active=TRUE AND deleted_at IS NULL", (payload.get("sub"),))
     if not user:
         raise HTTPException(status_code=401, detail="Користувача не знайдено")
     return user

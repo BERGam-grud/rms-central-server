@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 
-from routers import auth, posts, measurements, alarms, users, thresholds, sync, sync_v2
+from routers import auth, posts, measurements, alarms, users, thresholds, sync, sync_v2, local_home
 from routers import ws
 from core.notifications import notification_worker
 from core.migrations import run_migrations
@@ -39,6 +39,7 @@ app.include_router(thresholds.router)
 app.include_router(users.router)
 app.include_router(sync.router)
 app.include_router(sync_v2.router)
+app.include_router(local_home.router)
 app.include_router(ws.router)
 
 # Статичний веб-інтерфейс

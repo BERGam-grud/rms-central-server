@@ -304,6 +304,18 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
 .admin-th-actions{display:flex;gap:5px;justify-content:flex-end}
 @media(max-width:1100px){.post-workspace-grid{grid-template-columns:1fr}.admin-dev-settings{grid-template-columns:1fr}}
 
+.local-home-card{background:linear-gradient(180deg,var(--bg-1),var(--bg-2));border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+.local-home-title{font-size:22px;font-weight:900;color:var(--text-pri);margin-bottom:4px}
+.local-home-sub{font-size:12px;color:var(--text-sec);margin-bottom:12px}
+.device-name-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.device-chip{border:1px solid var(--border);background:#111820;border-radius:999px;padding:7px 10px;font-size:12px;color:var(--text-pri);display:inline-flex;gap:6px;align-items:center}
+.device-chip.online{border-color:#00e5a055;background:#00e5a010}.device-chip.offline{opacity:.65}
+.local-device-chart-card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.local-device-chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.local-device-chart-title{font-weight:900;color:var(--text-pri);font-size:14px}
+.local-device-chart-meta{font-size:11px;color:var(--text-sec);margin-top:3px}.local-device-chart-latest{font-family:var(--font-mono);font-weight:900;color:var(--green);font-size:15px;white-space:nowrap}.local-device-chart-body{height:220px}.local-device-empty{border:1px dashed var(--border);border-radius:var(--radius);padding:22px;color:var(--text-sec);text-align:center;background:var(--bg-2)}
+
+
 </style>
 </head>
 <body>
@@ -323,14 +335,6 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
 <div id="app">
   <div class="topbar">
     <div class="topbar-brand"><div class="dot"></div>РМС · Радіаційний моніторинг</div>
-    <div class="server-switch" id="server-switch">
-      <button class="srv-btn active" id="btn-local" onclick="switchServer('local')">
-        ◉ Локальний
-      </button>
-      <button class="srv-btn" id="btn-central" onclick="switchServer('central')">
-        ◎ Центральний
-      </button>
-    </div>
     <div class="topbar-time" id="tt">--:--:--</div>
     <div class="topbar-user">
       <span id="tu">—</span><span class="role-badge" id="tr2">—</span>
@@ -368,7 +372,7 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
       <!-- DASHBOARD -->
       <div class="page active" id="page-dashboard">
         <div class="page-header">
-          <div><div class="page-title">Головна</div><div class="page-sub" id="dash-upd">Очікування даних...</div></div>
+          <div><div class="page-title" id="local-home-title">Головна</div><div class="page-sub" id="dash-upd">Очікування даних...</div></div>
           <div class="page-actions">
             <select class="fi" id="chart-hours" onchange="reloadCharts()">
               <option value="1">Остання година</option>
@@ -379,8 +383,13 @@ tbody td.val{font-family:var(--font-mono);font-size:13px;color:var(--text-pri);f
             <button class="btn-action green" onclick="exportDashCSV()">⬇ CSV</button>
           </div>
         </div>
-        <div class="central-banner" id="central-banner">
+        <div class="central-banner" id="central-banner" style="display:none">
           ◎ Центральний сервер — перегляд даних з усіх постів
+        </div>
+        <div class="local-home-card" id="local-home-card">
+          <div class="local-home-title" id="local-post-label">Пост —</div>
+          <div class="local-home-sub" id="local-home-sub">Локальне робоче місце · прилади та графіки прив'язаних постів</div>
+          <div class="device-name-chips" id="local-device-names"></div>
         </div>
         <div class="kpi-grid" id="kpi-grid"></div>
 
@@ -755,53 +764,16 @@ const API_CENTRAL = 'https://rms-central-server-production.up.railway.app';
 let API = API_LOCAL;
 let currentServer = 'local';
 
-// Якщо відкрито з Railway або ngrok — одразу використовуємо поточний сервер
-if (IS_RAILWAY) {
-  API = '';  // відносні URL — запити йдуть на той самий сервер
-}
-
-function switchServer(type) {
-  currentServer = type;
-  if (type === 'central') {
-    API = API_CENTRAL;
-  } else {
-    // Локальний: якщо ми на Railway — відносні URL, інакше localhost
-    API = IS_RAILWAY ? '' : 'http://localhost:8000';
-  }
-
-  // Оновлюємо кнопки
-  document.getElementById('btn-local').classList.toggle('active', type==='local');
-  document.getElementById('btn-central').classList.toggle('active', type==='central');
-
-  // Банер
-  const banner = document.getElementById('central-banner');
-  if (banner) banner.classList.toggle('show', type==='central');
-
-  // Перепідключаємо WebSocket
-  if (ws) { ws.close(); }
-
-  // Очищаємо графіки
-  chartHist = {};
-  for (const p of CH_PARAMS) {
-    if (chartInst[p]) {
-      chartInst[p].data.labels = [];
-      chartInst[p].data.datasets[0].data = [];
-      chartInst[p].update('none');
-    }
-  }
-
-  // Перезавантажуємо дані
-  loadDevices();
-  loadAlarms();
-  initCharts();
-  if(document.getElementById('page-post-detail')?.classList.contains('active')) refreshPostWorkspace();
-  toast(type==='central' ? '◎ Центральний сервер' : '◉ Локальний сервер', 'success');
-}
+// Перемикач Центральний/Локальний прибрано з інтерфейсу.
+// Railway лишається диспетчерським сервером для admin, локальний сервер — робочим місцем поста.
+if (IS_RAILWAY) API = '';
+function switchServer(type) { return; }
 let token=localStorage.getItem('rms_token')||null;
 let me=JSON.parse(localStorage.getItem('rms_user')||'null');
 let ws=null, wsRetry=0;
 let liveData=[],liveAlarms={},activeAlarms=[];
 let chartInst={},chartHist={};
+let localHome=null, localDeviceCharts=[];
 let readingsData=[],alarmsData=[],archData=[];
 let allPosts=[],editPostId=null,editDevPostId=null;
 let leafMap=null,mapMarkers={};
@@ -969,54 +941,85 @@ async function resolveAlarmDash(id){
   toast('Аварію закрито','success');
 }
 
-// ── CHARTS: ініціалізація з БД ───────────────────────────────
+// ── LOCAL HOME + DEVICE CHARTS ──────────────────────────────
+async function loadLocalHome(){
+  localHome = await api('/api/local/home');
+  const label=document.getElementById('local-post-label');
+  const sub=document.getElementById('local-home-sub');
+  const chips=document.getElementById('local-device-names');
+  if(!localHome || !localHome.ok){
+    if(label) label.textContent='Пост —';
+    if(chips) chips.innerHTML='<span class="device-chip offline">Немає даних</span>';
+    return null;
+  }
+  if(label) label.textContent='Пост №: '+(localHome.post_label||'не прив’язано');
+  if(sub) sub.textContent=`${localHome.posts.length} пост(ів) · ${localHome.devices.length} прилад(ів)`;
+  if(chips){
+    chips.innerHTML = localHome.devices.length
+      ? localHome.devices.map(d=>`<span class="device-chip ${d.is_online?'online':'offline'}">${d.is_online?'●':'○'} ${d.name}</span>`).join('')
+      : '<span class="device-chip offline">Прилади відсутні</span>';
+  }
+  return localHome;
+}
+
 async function initCharts(){
+  await loadLocalHome();
   buildChartCards();
   await loadChartHistory();
 }
 
 async function reloadCharts(){
-  // Очищаємо і перезавантажуємо
-  for(const p of CH_PARAMS){
-    if(chartInst[p]){chartInst[p].data.labels=[];chartInst[p].data.datasets[0].data=[];chartInst[p].update('none');}
+  for(const id of Object.keys(chartInst)){
+    if(chartInst[id]){chartInst[id].data.labels=[];chartInst[id].data.datasets[0].data=[];chartInst[id].update('none');}
   }
   chartHist={};
+  await loadLocalHome();
+  buildChartCards();
   await loadChartHistory();
 }
 
 async function loadChartHistory(){
   const hours=parseInt(document.getElementById('chart-hours')?.value||'2');
-  for(const p of CH_PARAMS){
-    const data=await api(`/api/measurements/chart-init?parameter=${p}&hours=${hours}`);
-    if(!data||!data.length) continue;
-    const ch=chartInst[p]; if(!ch) continue;
-    ch.data.labels=data.map(r=>new Date(r.recorded_at).toLocaleTimeString('uk-UA'));
-    ch.data.datasets[0].data=data.map(r=>parseFloat(r.value));
+  for(const d of localDeviceCharts){
+    if(!d.parameter) continue;
+    const data=await api(`/api/local/device-history?device_id=${d.id}&parameter=${encodeURIComponent(d.parameter)}&hours=${hours}`);
+    const ch=chartInst[d.id]; if(!ch) continue;
+    const rows=data||[];
+    ch.data.labels=rows.map(r=>new Date(r.recorded_at).toLocaleTimeString('uk-UA'));
+    ch.data.datasets[0].data=rows.map(r=>parseFloat(r.value));
     ch.update('none');
-    // Заповнюємо chartHist для подальших live оновлень
-    const key=data[0].device_id+'::'+p;
-    chartHist[key]=data.map(r=>({t:new Date(r.recorded_at),v:parseFloat(r.value)}));
-    // Обрізаємо до MAX_PTS
-    if(chartHist[key].length>MAX_PTS) chartHist[key]=chartHist[key].slice(-MAX_PTS);
+    chartHist[d.id]={parameter:d.parameter, unit:rows[0]?.unit||d.latest?.unit||'', rows:rows.map(r=>({t:new Date(r.recorded_at),v:parseFloat(r.value)}))};
+    const meta=document.getElementById('chart-meta-'+d.id);
+    if(meta) meta.textContent=rows.length?`${d.parameter} · ${rows.length} точок`:'Немає історії вимірювань';
   }
 }
 
 function buildChartCards(){
-  const grid=document.getElementById('charts-grid'); grid.innerHTML='';
-  for(const p of CH_PARAMS){
-    const d=document.createElement('div'); d.className='chart-card';
-    d.innerHTML=`<div class="chart-header">
-      <div><div class="chart-title">${CH_LABELS[p]}</div><div class="chart-meta" id="chart-meta-${p}">Завантаження...</div></div>
-      <div class="chart-actions">
-        <button class="btn-export" onclick="expPNG('${p}')">PNG</button>
-        <button class="btn-export" onclick="expCSV('${p}')">CSV</button>
-        <button class="btn-export" onclick="expSVG('${p}')">SVG</button>
-      </div></div><div class="chart-body"><canvas id="ch-${p}"></canvas></div>`;
-    grid.appendChild(d);
-    const ctx=d.querySelector('#ch-'+p).getContext('2d');
-    chartInst[p]=new Chart(ctx,{
+  const grid=document.getElementById('charts-grid'); grid.innerHTML=''; chartInst={}; localDeviceCharts=[];
+  const devices=(localHome&&localHome.devices)||[];
+  if(!devices.length){
+    grid.innerHTML='<div class="local-device-empty">Для прив’язаного поста ще немає приладів.</div>';
+    return;
+  }
+  for(const d of devices){
+    const param=d.preferred_parameter;
+    localDeviceCharts.push({id:d.id, parameter:param, latest:d.latest});
+    const latest=d.latest&&d.latest.value!==null ? `${Number(d.latest.value).toFixed(4)} ${d.latest.unit||''}` : '—';
+    const card=document.createElement('div'); card.className='local-device-chart-card';
+    card.innerHTML=`<div class="local-device-chart-head">
+      <div>
+        <div class="local-device-chart-title">${d.name}</div>
+        <div class="local-device-chart-meta">${d.type||'—'} · ${d.post_name||'—'} · ${param||'немає параметрів'}</div>
+      </div>
+      <div class="local-device-chart-latest">${latest}</div>
+    </div>
+    <div class="local-device-chart-body">${param?`<canvas id="ch-${d.id}"></canvas>`:'<div class="local-device-empty">Немає вимірювань для побудови графіка</div>'}</div>`;
+    grid.appendChild(card);
+    if(!param) continue;
+    const ctx=card.querySelector('#ch-'+d.id).getContext('2d');
+    chartInst[d.id]=new Chart(ctx,{
       type:'line',
-      data:{labels:[],datasets:[{data:[],borderColor:CH_COLORS[p],backgroundColor:CH_COLORS[p]+'18',borderWidth:1.5,pointRadius:0,fill:true,tension:.3}]},
+      data:{labels:[],datasets:[{data:[],borderColor:CH_COLORS[param]||'#00e5a0',backgroundColor:(CH_COLORS[param]||'#00e5a0')+'18',borderWidth:1.5,pointRadius:0,fill:true,tension:.3}]},
       options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},
         scales:{x:{ticks:{color:'#4a5568',font:{size:10},maxTicksLimit:10},grid:{color:'#1a1e2688'}},
                 y:{ticks:{color:'#4a5568',font:{size:10}},grid:{color:'#1a1e2688'}}}}
@@ -1028,45 +1031,37 @@ function buildChartCards(){
 function updateChartLive(){
   const now=new Date();
   for(const r of liveData){
-    if(!CH_PARAMS.includes(r.parameter)) continue;
-    const k=r.device_id+'::'+r.parameter;
-    if(!chartHist[k]) chartHist[k]=[];
-    // Додаємо тільки якщо нові дані
-    const last=chartHist[k][chartHist[k].length-1];
-    if(last && Math.abs(now-last.t)<2000) continue;
-    chartHist[k].push({t:now,v:parseFloat(r.value)});
-    if(chartHist[k].length>MAX_PTS) chartHist[k].shift();
-  }
-  for(const p of CH_PARAMS){
-    const ch=chartInst[p]; if(!ch) continue;
-    const k=Object.keys(chartHist).find(x=>x.endsWith('::'+p)); if(!k) continue;
-    const h=chartHist[k];
-    ch.data.labels=h.map(x=>x.t.toLocaleTimeString('uk-UA'));
-    ch.data.datasets[0].data=h.map(x=>x.v);
+    const ch=chartInst[r.device_id]; if(!ch) continue;
+    const cfg=localDeviceCharts.find(d=>d.id===r.device_id); if(!cfg || cfg.parameter!==r.parameter) continue;
+    if(!chartHist[r.device_id]) chartHist[r.device_id]={parameter:r.parameter, unit:r.unit, rows:[]};
+    const rows=chartHist[r.device_id].rows;
+    const last=rows[rows.length-1];
+    const rt=r.recorded_at?new Date(r.recorded_at):now;
+    if(last && Math.abs(rt-last.t)<1500) continue;
+    rows.push({t:rt,v:parseFloat(r.value)});
+    if(rows.length>MAX_PTS) rows.shift();
+    ch.data.labels=rows.map(x=>x.t.toLocaleTimeString('uk-UA'));
+    ch.data.datasets[0].data=rows.map(x=>x.v);
     ch.update('none');
-    const meta=document.getElementById('chart-meta-'+p);
-    if(meta) meta.textContent=`Реальний час · ${h.length} точок`;
+    const meta=document.getElementById('chart-meta-'+r.device_id);
+    if(meta) meta.textContent=`${r.parameter} · реальний час · ${rows.length} точок`;
   }
 }
 
 // ── CHART EXPORT ─────────────────────────────────────────────
-function expPNG(p){const a=document.createElement('a');a.href=document.getElementById('ch-'+p).toDataURL('image/png');a.download=p+'_'+ts()+'.png';a.click();toast('Збережено PNG','success');}
-function expCSV(p){const k=Object.keys(chartHist).find(x=>x.endsWith('::'+p));if(!k)return;dl('Час,Значення\n'+chartHist[k].map(x=>`${x.t.toISOString()},${x.v}`).join('\n'),p+'_'+ts()+'.csv','text/csv');toast('Збережено CSV','success');}
-function expSVG(p){
-  const k=Object.keys(chartHist).find(x=>x.endsWith('::'+p));if(!k)return;
-  const h=chartHist[k],W=600,H=200,PL=50,PR=10,PT=10,PB=30,W2=W-PL-PR,H2=H-PT-PB;
+function expPNG(id){const c=document.getElementById('ch-'+id);if(!c)return;const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='device_'+id+'_'+ts()+'.png';a.click();toast('Збережено PNG','success');}
+function expCSV(id){const h=chartHist[id]?.rows;if(!h||!h.length)return;dl('Час,Значення
+'+h.map(x=>`${x.t.toISOString()},${x.v}`).join('
+'),'device_'+id+'_'+ts()+'.csv','text/csv');toast('Збережено CSV','success');}
+function expSVG(id){
+  const h=chartHist[id]?.rows;if(!h||!h.length)return;
+  const W=600,H=200,PL=50,PR=10,PT=10,PB=30,W2=W-PL-PR,H2=H-PT-PB;
   const vals=h.map(x=>x.v),mn=Math.min(...vals),mx=Math.max(...vals)||mn+1;
-  const px=i=>PL+(i/(h.length-1||1))*W2,py=v=>PT+H2-((v-mn)/(mx-mn))*H2;
+  const px=i=>PL+(i/(h.length-1||1))*W2,py=v=>PT+H2-((v-mn)/(mx-mn||1))*H2;
   const pts=h.map((x,i)=>`${px(i)},${py(x.v)}`).join(' ');
   const fp=`${px(0)},${PT+H2} ${pts} ${px(h.length-1)},${PT+H2}`;
-  const c=CH_COLORS[p];
-  dl(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="background:#13161b">
-    <polygon points="${fp}" fill="${c}18"/>
-    <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5"/>
-    <text x="${PL}" y="${H-6}" fill="#4a5568" font-size="10">${h[0]?.t.toLocaleTimeString('uk-UA')||''}</text>
-    <text x="${W-PR}" y="${H-6}" fill="#4a5568" font-size="10" text-anchor="end">${h[h.length-1]?.t.toLocaleTimeString('uk-UA')||''}</text>
-    <text x="${W/2}" y="18" fill="#e8ecf2" font-size="11" text-anchor="middle">${CH_LABELS[p]}</text></svg>`,
-    p+'_'+ts()+'.svg','image/svg+xml');
+  const c='#00e5a0';
+  dl(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="background:#13161b"><polygon points="${fp}" fill="${c}18"/><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5"/></svg>`,'device_'+id+'_'+ts()+'.svg','image/svg+xml');
   toast('Збережено SVG','success');
 }
 
@@ -1743,6 +1738,7 @@ function showPage(name){
   if(name==='users')   loadUsers();
   if(name==='readings')renderReadings();
   if(name==='posts')   {loadPosts();setTimeout(()=>leafMap&&leafMap.invalidateSize(),300);}
+  if(name==='dashboard') reloadCharts();
 }
 
 // ── HELPERS ──────────────────────────────────────────────────
