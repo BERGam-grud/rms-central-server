@@ -11,11 +11,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
-from routers import sync_v2
 
-from routers import auth, posts, measurements, alarms, users, thresholds, sync
+from routers import auth, posts, measurements, alarms, users, thresholds, sync, sync_v2
 from routers import ws
 from core.notifications import notification_worker
+from core.migrations import run_migrations
 
 app = FastAPI(
     title="РМС — Центральний сервер",
@@ -30,7 +30,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(sync_v2.router)
+
 app.include_router(auth.router)
 app.include_router(posts.router)
 app.include_router(measurements.router)
@@ -38,6 +38,7 @@ app.include_router(alarms.router)
 app.include_router(thresholds.router)
 app.include_router(users.router)
 app.include_router(sync.router)
+app.include_router(sync_v2.router)
 app.include_router(ws.router)
 
 # Статичний веб-інтерфейс
@@ -65,6 +66,7 @@ else:
 
 @app.on_event("startup")
 async def startup():
+    run_migrations()
     asyncio.create_task(notification_worker())
 
 
